@@ -429,6 +429,7 @@ def continuous_barrier(
 
     X = np.ones(M) * x
     dt = T/N
+    probas = np.ones(M).astype('float32')
     
     borne_min = min(D)
     borne_max = max(D)
@@ -440,16 +441,17 @@ def continuous_barrier(
         warn("Warning : The starting position of the process is outside the domain.")
         
     for i in range(N):
-        past_X = X[-1]
+        past_X = X
         X = X + b_black_scholes(X=X, b=r) * dt + sigma_black_scholes(X=X, sigma=sigma) * np.random.normal(size=M) * np.sqrt(dt)
         
-        bernoulli_p = 1 - p(past_X, X[-1], dt, D, sigma)
-        went_outside_between = np.random.binomial(1, bernoulli_p, size=M)
+        bernoulli_p = 1 - p(past_X, X, dt, D, sigma)
+        probas *= p(past_X, X, dt, D, sigma)
+        #went_outside_between = np.random.binomial(1, bernoulli_p, size=M)
         
         went_outside = indicatrice_outside_domaine(X, D) | went_outside   # For the particular discrete values
-        went_outside = went_outside | went_outside_between                # Between those values
+        #went_outside = went_outside | went_outside_between                # Between those values
     
-    return X, went_outside
+    return X, probas
 
 
 def mc_pricer_knock_out_continuous(
@@ -471,12 +473,27 @@ def mc_pricer_knock_out_continuous(
     else:
         D = (-np.inf, B)
     # Get the terminal prices XT and the went_outside array
-    XT, went_outside = continuous_barrier(x, T, N, M, D, r=r, sigma=sigma)
+    XT, probas = continuous_barrier(x, T, N, M, D, r=r, sigma=sigma)
+    
     # Return the call price
     if type_option == "call":
-        return call_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
+        #return call_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
+        
+        premium = probas * np.maximum(XT - K, 0)
+        price = np.mean(premium)
+        actualized_price = np.exp(-r*T) * price
+        
+        return actualized_price
     else:
-        return put_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
+        #return put_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
+        
+        premium = probas * np.maximum(K - XT, 0)
+        price = np.mean(premium)
+        actualized_price = np.exp(-r*T) * price
+
+        return actualized_price
+        
+        
     
 
 
@@ -557,7 +574,7 @@ def convergence_out(
     Plot the strong and weak errors for the scheme.
     """
     # List of N values
-    l_N = np.logspace(1, 4, nb_points).astype(int)
+    l_N = np.logspace(1, 3, nb_points).astype(int)
     # List of strong and weak errors for each m values
     l_error_d = np.empty(nb_points)
     l_error_c = np.empty(nb_points)
@@ -579,6 +596,8 @@ def convergence_out(
         # Compute the errors
         l_error_d[k] = np.abs(price_closed-price_mc_discrete)
         l_error_c[k] = np.abs(price_closed-price_mc_continuous)
+       
+    print(l_error_c)
     # Plot the errors
     fig, axs = plt.subplots(2, figsize=(12, 8))
     axs[0].plot(l_N, l_error_d)
@@ -605,7 +624,7 @@ def convergence_out(
     axs[1].grid()
     # Y-axis title
     axs[0].set_ylabel("Weak error ($) (log)")
-    axs[1].set_ylabel("Strong error ($) (log)")
+    axs[1].set_ylabel("Weak error ($) (log)")
     # X-axis title
     axs[0].set_xlabel("Number of time steps (N) (log)")
     axs[1].set_xlabel("Number of time steps (N) (log)")
