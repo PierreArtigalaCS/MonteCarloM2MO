@@ -354,7 +354,9 @@ def call_price_mc(r, T, XT, K, went_outside):
     price = np.mean(premium)
     actualized_price = np.exp(-r*T) * price
     
-    return actualized_price
+    var = np.var(np.exp(-r*T) * premium)
+    
+    return actualized_price, var
 
 
 def put_price_mc(r, T, XT, K, went_outside):
@@ -362,7 +364,9 @@ def put_price_mc(r, T, XT, K, went_outside):
     price = np.mean(premium)
     actualized_price = np.exp(-r*T) * price
     
-    return actualized_price
+    var = np.var(np.exp(-r*T) * premium)
+    
+    return actualized_price, var
 
 
 def mc_pricer_knock_out_discrete(
@@ -483,15 +487,19 @@ def mc_pricer_knock_out_continuous(
         price = np.mean(premium)
         actualized_price = np.exp(-r*T) * price
         
-        return actualized_price
+        var = np.var(premium * np.exp(-r*T))
+        
+        return actualized_price, var
     else:
         #return put_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
         
         premium = probas * np.maximum(K - XT, 0)
         price = np.mean(premium)
         actualized_price = np.exp(-r*T) * price
+        
+        var = np.var(premium * np.exp(-r*T))
 
-        return actualized_price
+        return actualized_price, var
         
         
     
@@ -519,7 +527,7 @@ def compare_prices_out(
     else:
         D = (-np.inf, B)
     # Compute the Monte Carlo prices
-    price_mc_discrete = mc_pricer_knock_out_discrete(
+    price_mc_discrete, var_discrete = mc_pricer_knock_out_discrete(
         x=S,
         K=K,
         B=B,
@@ -531,7 +539,7 @@ def compare_prices_out(
         type_option=type_option,
         type_barrier=type_barrier
     )
-    price_mc_continuous = mc_pricer_knock_out_continuous(
+    price_mc_continuous, var_continuous = mc_pricer_knock_out_continuous(
         x=S,
         K=K,
         B=B,
@@ -554,7 +562,7 @@ def compare_prices_out(
         r=r,
         sigma=sigma
     )
-    return price_closed, price_mc_discrete, price_mc_continuous
+    return price_closed, price_mc_discrete, price_mc_continuous, var_discrete, var_continuous
 
 
 def convergence_out(
@@ -575,13 +583,19 @@ def convergence_out(
     """
     # List of N values
     l_N = np.logspace(1, 3, nb_points).astype(int)
-    # List of strong and weak errors for each m values
+    
+    # List of weak errors for each N
     l_error_d = np.empty(nb_points)
     l_error_c = np.empty(nb_points)
+    
+    # List of variances for each N
+    l_var_d = np.empty(nb_points)
+    l_var_c = np.empty(nb_points)
+    
     for k in range(nb_points):
         N = l_N[k]
         # Get the different prices
-        price_closed, price_mc_discrete, price_mc_continuous = compare_prices_out(
+        price_closed, price_mc_discrete, price_mc_continuous, var_discerete, var_continuous = compare_prices_out(
             S=S,
             K=K,
             T=T,
@@ -596,40 +610,66 @@ def convergence_out(
         # Compute the errors
         l_error_d[k] = np.abs(price_closed-price_mc_discrete)
         l_error_c[k] = np.abs(price_closed-price_mc_continuous)
+        
+        # Appending the variances
+        l_var_d[k] = var_discerete
+        l_var_c[k] = var_continuous
+    
+    print(l_var_d)
+    print(l_var_c)
        
-    print(l_error_c)
+    
     # Plot the errors
-    fig, axs = plt.subplots(2, figsize=(12, 8))
+    fig, axs = plt.subplots(3, figsize=(12, 12))
     axs[0].plot(l_N, l_error_d)
     axs[1].plot(l_N, l_error_c)
+    axs[2].plot(l_N, l_var_d)
+    axs[2].plot(l_N, l_var_c)
+    
+    
     # Compute lines with slope 1 or 1/2 to illustrate the convergence
     slope_d = 0.5
     slope_c = 1
+    
     # The slope lists are calibrated so that they are close to the plot (0.9 parameter)
     l_slope_d = ((1 / l_N) ** slope_d) * l_error_d[0] / ((1 / l_N) ** slope_d)[0] * 0.9
     l_slope_c = ((1 / l_N) ** slope_c) * l_error_c[0] / ((1 / l_N) ** slope_c)[0] * 0.9
+    
     # Plot the lines for the slope
     axs[0].plot(l_N, l_slope_d, linestyle="--", color="red")
     axs[1].plot(l_N, l_slope_c, linestyle="--", color="red")
+    
     # Set the plot titles
     axs[0].set_title("Discrete Euler error VS number of time steps")
     axs[1].set_title("Continuous Euler error VS number of time steps")
+    axs[2].set_title("Variance of the Euler estimators VS number of time steps")
+    
     # Set the x and y-axes scales
     axs[0].set_xscale("log")
     axs[0].set_yscale("log")
     axs[1].set_xscale("log")
     axs[1].set_yscale("log")
+    axs[2].set_xscale("log")
+    
     # Grid for the plot
     axs[0].grid()
     axs[1].grid()
+    axs[2].grid()
+    
     # Y-axis title
     axs[0].set_ylabel("Weak error ($) (log)")
     axs[1].set_ylabel("Weak error ($) (log)")
+    axs[2].set_ylabel("Variance of the estimator")
+    
     # X-axis title
     axs[0].set_xlabel("Number of time steps (N) (log)")
     axs[1].set_xlabel("Number of time steps (N) (log)")
+    axs[2].set_xlabel("Number of time steps (N) (log)")
+    
     # Legend
     axs[0].legend(["Discrete error", "Slope " + str(-slope_d)])
     axs[1].legend(["Continuous error", "Slope " + str(-slope_c)])
+    axs[2].legend(["Discrete variance", "Continuous variance"])
+    
     # Tight layout
     fig.tight_layout()
