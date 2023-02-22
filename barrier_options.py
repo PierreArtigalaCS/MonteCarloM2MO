@@ -352,52 +352,25 @@ def discrete_barrier(
 def call_price_mc(r, T, XT, K, went_outside, knock: str = "out"):
     # If it is a knock-out option, went_outside = 1 <=> premium = 0
     if knock == "out":
-        premium = np.maximum((1-went_outside).astype('int') * (XT - K), 0)
+        actualized_premium = np.exp(-r*T) * np.maximum((1-went_outside).astype('int') * (XT - K), 0)
     else:
-        premium = np.maximum(went_outside.astype('int') * (XT - K), 0)
-    price = np.mean(premium)
-    actualized_price = np.exp(-r*T) * price
-    
-    return actualized_price
+        actualized_premium = np.exp(-r*T) * np.maximum(went_outside.astype('int') * (XT - K), 0)
+    price = np.mean(actualized_premium)
+    # Compute the standard deviation of the price
+    std = actualized_premium.std()
+    return price, std
 
 
 def put_price_mc(r, T, XT, K, went_outside, knock: str = "out"):
     # If it is a knock-out option, went_outside = 1 <=> premium = 0
     if knock == "out":
-        premium = np.maximum((1-went_outside).astype('int') * (K - XT), 0)
+        actualized_premium = np.exp(-r*T) * np.maximum((1-went_outside).astype('int') * (K - XT), 0)
     else:
-        premium = np.maximum(went_outside.astype('int') * (K - XT), 0)
-    price = np.mean(premium)
-    actualized_price = np.exp(-r*T) * price
-    
-    return actualized_price
-
-
-# def mc_pricer_knock_out_discrete(
-#     x: float,
-#     K: float,
-#     B: float,
-#     T: float,
-#     N: int,
-#     M: int,
-#     r: float,
-#     sigma: float,
-#     type_option: str,
-#     type_barrier: str
-#     ):
-#     """Monte-Carlo pricing of a knock-out barrier call using the discrete Euler Scheme."""
-#     # Create the domain
-#     if type_barrier == "down_out":
-#         D = (B, np.inf)
-#     else:
-#         D = (-np.inf, B)
-#     # Get the terminal prices XT and the went_outside array
-#     XT, went_outside = discrete_barrier(x, T, N, M, D, r=r, sigma=sigma)
-#     # Return the call price
-#     if type_option == "call":
-#         return call_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
-#     else:
-#         return put_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
+        actualized_premium = np.exp(-r*T) * np.maximum(went_outside.astype('int') * (K - XT), 0)
+    price = np.mean(actualized_premium)
+    # Compute the standard deviation of the price
+    std = actualized_premium.std()
+    return price, std
     
 
 def mc_pricer_discrete(
@@ -479,55 +452,8 @@ def continuous_barrier(
     for i in range(N):
         past_X = X
         X = X + b_black_scholes(X=X, b=r) * dt + sigma_black_scholes(X=X, sigma=sigma) * np.random.normal(size=M) * np.sqrt(dt)
-        
-        # bernoulli_p = 1 - p(past_X, X, dt, D, sigma)
         probas *= p(past_X, X, dt, D, sigma)
-        #went_outside_between = np.random.binomial(1, bernoulli_p, size=M)
-        
-        # went_outside = indicatrice_outside_domaine(X, D) | went_outside   # For the particular discrete values
-        #went_outside = went_outside | went_outside_between                # Between those values
-    
     return X, probas
-
-
-# def mc_pricer_knock_out_continuous(
-#     x: float,
-#     K: float,
-#     B: float,
-#     T: float,
-#     N: int,
-#     M: int,
-#     r: float,
-#     sigma: float,
-#     type_option: str,
-#     type_barrier: str
-#     ):
-#     """Monte-Carlo pricing of a knock-out barrier call using the continous Euler Scheme."""
-#     # Create the domain
-#     if type_barrier == "down_out":
-#         D = (B, np.inf)
-#     else:
-#         D = (-np.inf, B)
-#     # Get the terminal prices XT and the went_outside array
-#     XT, probas = continuous_barrier(x, T, N, M, D, r=r, sigma=sigma)
-    
-#     # Return the call price
-#     if type_option == "call":
-#         #return call_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
-        
-#         premium = probas * np.maximum(XT - K, 0)
-#         price = np.mean(premium)
-#         actualized_price = np.exp(-r*T) * price
-        
-#         return actualized_price
-#     else:
-#         #return put_price_mc(r=r, T=T, XT=XT, K=K, went_outside=went_outside)
-        
-#         premium = probas * np.maximum(K - XT, 0)
-#         price = np.mean(premium)
-#         actualized_price = np.exp(-r*T) * price
-
-#         return actualized_price
         
         
 def mc_pricer_continuous(
@@ -556,77 +482,22 @@ def mc_pricer_continuous(
     # Return the call price
     if type_option == "call":
         premium = probas * np.maximum(XT - K, 0)
-        price = np.mean(premium)
-        actualized_price = np.exp(-r*T) * price
+        actualized_premium = np.exp(-r*T) * premium
+        price = np.mean(actualized_premium)
     else:
         premium = probas * np.maximum(K - XT, 0)
-        price = np.mean(premium)
-        actualized_price = np.exp(-r*T) * price
+        actualized_premium = np.exp(-r*T) * premium
+        price = np.mean(actualized_premium)
 
-    return actualized_price    
+    # Compute the standard deviation of the price
+    std = actualized_premium.std()
+    return price, std
 
 
 
 ######################################################################
 # COMPARISON CLOSED FORMULAS VS MONTE CARLO
 ######################################################################
-# def compare_prices_out(
-#     S: float,
-#     K: float,
-#     T: float,
-#     N: int,
-#     M: int,
-#     r: float,
-#     sigma: float,
-#     B: float,
-#     type_option: str,
-#     type_barrier: str
-# ):
-#     """Compare the prices of knock-out options given by the closed formula, discrete and continuous Monte Carlo."""
-#     # Create the domain
-#     if type_barrier == "down_out":
-#         D = (B, np.inf)
-#     else:
-#         D = (-np.inf, B)
-#     # Compute the Monte Carlo prices
-#     price_mc_discrete = mc_pricer_knock_out_discrete(
-#         x=S,
-#         K=K,
-#         B=B,
-#         T=T,
-#         N=N,
-#         M=M,
-#         r=r,
-#         sigma=sigma,
-#         type_option=type_option,
-#         type_barrier=type_barrier
-#     )
-#     price_mc_continuous = mc_pricer_knock_out_continuous(
-#         x=S,
-#         K=K,
-#         B=B,
-#         T=T,
-#         N=N,
-#         M=M,
-#         r=r,
-#         sigma=sigma,
-#         type_option=type_option,
-#         type_barrier=type_barrier
-#     )
-#     # Get the appropriate closed formula function
-#     f = MAPPING_FUNCTIONS[type_option][type_barrier]
-#     # Compute the closed formula price
-#     price_closed = f(
-#         S=S, 
-#         K=K,
-#         B=B,
-#         T=T,
-#         r=r,
-#         sigma=sigma
-#     )
-#     return price_closed, price_mc_discrete, price_mc_continuous
-
-
 def compare_prices(
     S: float,
     K: float,
@@ -647,7 +518,7 @@ def compare_prices(
     else:
         D = (-np.inf, B)
     # Compute the Monte Carlo prices
-    price_mc_discrete = mc_pricer_discrete(
+    price_mc_discrete, std_d = mc_pricer_discrete(
         x=S,
         K=K,
         B=B,
@@ -660,7 +531,7 @@ def compare_prices(
         direction=direction,
         knock=knock
     )
-    price_mc_continuous = mc_pricer_continuous(
+    price_mc_continuous, std_c = mc_pricer_continuous(
         x=S,
         K=K,
         B=B,
@@ -684,85 +555,7 @@ def compare_prices(
         r=r,
         sigma=sigma
     )
-    return price_closed, price_mc_discrete, price_mc_continuous
-
-
-# def convergence_out(
-#     S: float,
-#     K: float,
-#     T: float,
-#     M: int,
-#     r: float,
-#     sigma: float,
-#     B: float,
-#     type_option: str,
-#     type_barrier: str,
-#     nb_points: int
-# ):
-#     """
-#     Illustrate the convergence of the numerical scheme with regards to N (number of time steps).
-#     Plot the strong and weak errors for the scheme.
-#     """
-#     # List of N values
-#     l_N = np.logspace(1, 3, nb_points).astype(int)
-#     # List of strong and weak errors for each m values
-#     l_error_d = np.empty(nb_points)
-#     l_error_c = np.empty(nb_points)
-#     for k in range(nb_points):
-#         N = l_N[k]
-#         # Get the different prices
-#         price_closed, price_mc_discrete, price_mc_continuous = compare_prices_out(
-#             S=S,
-#             K=K,
-#             T=T,
-#             N=N,
-#             M=M,
-#             r=r,
-#             sigma=sigma,
-#             B=B,
-#             type_option=type_option,
-#             type_barrier=type_barrier
-#         )
-#         # Compute the errors
-#         l_error_d[k] = np.abs(price_closed-price_mc_discrete)
-#         l_error_c[k] = np.abs(price_closed-price_mc_continuous)
-       
-#     print(l_error_c)
-#     # Plot the errors
-#     fig, axs = plt.subplots(2, figsize=(12, 8))
-#     axs[0].plot(l_N, l_error_d)
-#     axs[1].plot(l_N, l_error_c)
-#     # Compute lines with slope 1 or 1/2 to illustrate the convergence
-#     slope_d = 0.5
-#     slope_c = 1
-#     # The slope lists are calibrated so that they are close to the plot (0.9 parameter)
-#     l_slope_d = ((1 / l_N) ** slope_d) * l_error_d[0] / ((1 / l_N) ** slope_d)[0] * 0.9
-#     l_slope_c = ((1 / l_N) ** slope_c) * l_error_c[0] / ((1 / l_N) ** slope_c)[0] * 0.9
-#     # Plot the lines for the slope
-#     axs[0].plot(l_N, l_slope_d, linestyle="--", color="red")
-#     axs[1].plot(l_N, l_slope_c, linestyle="--", color="red")
-#     # Set the plot titles
-#     axs[0].set_title("Discrete Euler error VS number of time steps")
-#     axs[1].set_title("Continuous Euler error VS number of time steps")
-#     # Set the x and y-axes scales
-#     axs[0].set_xscale("log")
-#     axs[0].set_yscale("log")
-#     axs[1].set_xscale("log")
-#     axs[1].set_yscale("log")
-#     # Grid for the plot
-#     axs[0].grid()
-#     axs[1].grid()
-#     # Y-axis title
-#     axs[0].set_ylabel("Weak error ($) (log)")
-#     axs[1].set_ylabel("Weak error ($) (log)")
-#     # X-axis title
-#     axs[0].set_xlabel("Number of time steps (N) (log)")
-#     axs[1].set_xlabel("Number of time steps (N) (log)")
-#     # Legend
-#     axs[0].legend(["Discrete error", "Slope " + str(-slope_d)])
-#     axs[1].legend(["Continuous error", "Slope " + str(-slope_c)])
-#     # Tight layout
-#     fig.tight_layout()
+    return {"price": [price_closed, price_mc_discrete, price_mc_continuous], "std": [std_d, std_c]}
 
 
 def convergence(
@@ -780,7 +573,7 @@ def convergence(
 ):
     """
     Illustrate the convergence of the numerical scheme with regards to N (number of time steps).
-    Plot the strong and weak errors for the scheme.
+    Plot the weak error against N.
     """
     # List of N values
     l_N = np.logspace(1, 3, nb_points).astype(int)
@@ -790,7 +583,7 @@ def convergence(
     for k in range(nb_points):
         N = l_N[k]
         # Get the different prices
-        price_closed, price_mc_discrete, price_mc_continuous = compare_prices(
+        result = compare_prices(
             S=S,
             K=K,
             T=T,
@@ -803,6 +596,7 @@ def convergence(
             direction=direction,
             knock=knock
         )
+        price_closed, price_mc_discrete, price_mc_continuous = result["price"]
         # Compute the errors
         l_error_d[k] = np.abs(price_closed-price_mc_discrete)
         l_error_c[k] = np.abs(price_closed-price_mc_continuous)
@@ -842,6 +636,90 @@ def convergence(
     axs[0].legend(["Discrete error", "Slope " + str(-slope_d)])
     axs[1].legend(["Continuous error", "Slope " + str(-slope_c)])
     # Title
-    fig.suptitle("Convergence for " + direction + "_" + knock + " " + type_option)
+    fig.suptitle("Convergence for " + direction + "_" + knock + " " + type_option + " (M=" + str(M) + ", S=" + str(S) + ", K=" + str(K) + ", B=" + str(B) + ")")
     # Tight layout
     fig.tight_layout()
+
+
+def convergence_price(
+    S: float,
+    K: float,
+    T: float,
+    M: int,
+    r: float,
+    sigma: float,
+    B: float,
+    type_option: str,
+    direction: str,
+    knock: str,
+    nb_points: int,
+    alpha: float
+):
+    """
+    Illustrate the convergence of the numerical scheme with regards to N (number of time steps).
+    Plot the price and its confidence interval (level alpha) against N.
+    """
+    # Compute the normal quantile z_{alpha/2}
+    z = norm.ppf(1-alpha/2)
+    # List of N values
+    l_N = np.linspace(10, 1000, nb_points).astype(int)
+    # List of strong and weak errors for each m values
+    l_price_closed = np.empty(nb_points)
+    l_price_d = np.empty(nb_points)
+    l_price_c = np.empty(nb_points)
+    high_d = np.empty(nb_points)
+    high_c = np.empty(nb_points)
+    low_d = np.empty(nb_points)
+    low_c = np.empty(nb_points)
+    for k in range(nb_points):
+        N = l_N[k]
+        # Get the different prices
+        result = compare_prices(
+            S=S,
+            K=K,
+            T=T,
+            N=N,
+            M=M,
+            r=r,
+            sigma=sigma,
+            B=B,
+            type_option=type_option,
+            direction=direction,
+            knock=knock
+        )
+        price_closed, price_mc_d, price_mc_c = result["price"]
+        std_d, std_c = result["std"]
+        # Compute the errors
+        l_price_closed[k] = price_closed
+        l_price_d[k] = price_mc_d
+        l_price_c[k] = price_mc_c
+        # Compute the high and low borders of the confidence interval
+        high_d[k] = price_mc_d + z * std_d / (M**0.5)
+        high_c[k] = price_mc_c + z * std_c / (M**0.5)
+        low_d[k] = price_mc_d - z * std_d / (M**0.5)
+        low_c[k] = price_mc_c - z * std_c / (M**0.5)
+       
+    # Plot the errors
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(l_N, l_price_closed, c="k", ls="--")
+    ax.plot(l_N, l_price_d, c="b")
+    ax.plot(l_N, l_price_c, c="r")
+    # Plot the confidence intervals
+    ax.fill_between(l_N, low_d, high_d, alpha=0.1, color="b")
+    ax.fill_between(l_N, low_c, high_c, alpha=0.1, color="r")
+    # Grid for the plot
+    ax.grid()
+    # Y-axis title
+    ax.set_ylabel("Price ($)")
+    # X-axis title
+    ax.set_xlabel("Number of time steps (N)")
+    # Legend
+    str_ci = str(int((1-alpha)*100)) + "% CI"
+    ax.legend(["Closed formula", "Discrete Euler", "Continuous Euler", str_ci+" discrete", str_ci+" continuous"])
+    # Title
+    fig.suptitle("Price convergence for " + direction + "_" + knock + " " + type_option + " (M=" + str(M) + ", S=" + str(S) + ", K=" + str(K) + ", B=" + str(B) + ")")
+    # Tight layout
+    fig.tight_layout()
+    # Save the figure
+    file_name = "cv-price-" + direction + "-" + knock + "-" + type_option + ".png"
+    fig.savefig("Figures/"+file_name)
